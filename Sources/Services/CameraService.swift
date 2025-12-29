@@ -39,9 +39,19 @@ final class CameraService: NSObject {
 
     /// 接続されているカメラを検出する
     func discoverCameras(timeout: TimeInterval = 3.0) async -> [CameraInfo] {
+        // 既にカメラが見つかっている場合は再検索しない
+        if !cameras.isEmpty {
+            return cameras.map { device in
+                CameraInfo(
+                    name: device.name ?? "Unknown",
+                    serialNumber: device.serialNumberString,
+                    deviceType: "PTP Camera"
+                )
+            }
+        }
+
         return await withCheckedContinuation { continuation in
             self.continuation = continuation
-            self.cameras = []
             deviceBrowser.start()
 
             // タイムアウト後に結果を返す（ブラウザは停止しない）
@@ -82,6 +92,11 @@ final class CameraService: NSObject {
 
     /// カメラ内のファイル一覧を取得
     func listFiles(path: String? = nil, timeout: TimeInterval = 10.0) async -> [FileInfo] {
+        // 既にファイル一覧がある場合はキャッシュを返す
+        if !pendingFiles.isEmpty {
+            return pendingFiles
+        }
+
         let _ = await discoverCameras()
 
         guard let camera = cameras.first else {
