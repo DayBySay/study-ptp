@@ -2,33 +2,45 @@ import Foundation
 @preconcurrency import ImageCaptureCore
 
 /// カメラ情報を表す構造体
-struct CameraInfo: Sendable {
-    let name: String
-    let serialNumber: String?
-    let deviceType: String
+public struct CameraInfo: Sendable, Equatable {
+    public let name: String
+    public let serialNumber: String?
+    public let deviceType: String
+
+    public init(name: String, serialNumber: String?, deviceType: String) {
+        self.name = name
+        self.serialNumber = serialNumber
+        self.deviceType = deviceType
+    }
 }
 
 /// ファイル情報を表す構造体
-struct FileInfo: Sendable {
-    let name: String
-    let size: Int64
-    let isDirectory: Bool
-    let path: String
+public struct FileInfo: Sendable, Equatable {
+    public let name: String
+    public let size: Int64
+    public let isDirectory: Bool
+    public let path: String
+
+    public init(name: String, size: Int64, isDirectory: Bool, path: String) {
+        self.name = name
+        self.size = size
+        self.isDirectory = isDirectory
+        self.path = path
+    }
 }
 
 /// ImageCaptureCoreを使用したカメラサービス
 /// PTPデバイスの検出、情報取得、ファイル操作を提供
 @MainActor
-final class CameraService: NSObject {
+public final class CameraService: NSObject {
     private let deviceBrowser: ICDeviceBrowser
     private var cameras: [ICCameraDevice] = []
     private var continuation: CheckedContinuation<[CameraInfo], Never>?
     private var fileContinuation: CheckedContinuation<[FileInfo], Never>?
     private var downloadContinuation: CheckedContinuation<URL, any Error>?
     private var pendingFiles: [FileInfo] = []
-    private var isEnumerating = false
 
-    override init() {
+    public override init() {
         deviceBrowser = ICDeviceBrowser()
         super.init()
         deviceBrowser.delegate = self
@@ -38,7 +50,7 @@ final class CameraService: NSObject {
     }
 
     /// 接続されているカメラを検出する
-    func discoverCameras(timeout: TimeInterval = 3.0) async -> [CameraInfo] {
+    public func discoverCameras(timeout: TimeInterval = 3.0) async -> [CameraInfo] {
         // 既にカメラが見つかっている場合は再検索しない
         if !cameras.isEmpty {
             return cameras.map { device in
@@ -76,7 +88,7 @@ final class CameraService: NSObject {
     }
 
     /// 接続されているカメラの詳細情報を取得
-    func getCameraDetails() async -> [(name: String, details: [String: String])] {
+    public func getCameraDetails() async -> [(name: String, details: [String: String])] {
         let _ = await discoverCameras()
         return cameras.map { device in
             var details: [String: String] = [:]
@@ -91,7 +103,7 @@ final class CameraService: NSObject {
     }
 
     /// カメラ内のファイル一覧を取得
-    func listFiles(path: String? = nil, timeout: TimeInterval = 10.0) async -> [FileInfo] {
+    public func listFiles(timeout: TimeInterval = 10.0) async -> [FileInfo] {
         // 既にファイル一覧がある場合はキャッシュを返す
         if !pendingFiles.isEmpty {
             return pendingFiles
@@ -106,7 +118,6 @@ final class CameraService: NSObject {
         return await withCheckedContinuation { continuation in
             self.fileContinuation = continuation
             self.pendingFiles = []
-            self.isEnumerating = true
 
             camera.delegate = self
             camera.requestOpenSession()
@@ -125,7 +136,7 @@ final class CameraService: NSObject {
     }
 
     /// ファイルをダウンロード
-    func downloadFile(named fileName: String, to destinationDir: URL) async throws -> URL {
+    public func downloadFile(named fileName: String, to destinationDir: URL) async throws -> URL {
         let _ = await discoverCameras()
 
         guard let camera = cameras.first else {
@@ -163,7 +174,7 @@ final class CameraService: NSObject {
     }
 
     /// 全ファイルをダウンロード
-    func downloadAllFiles(to destinationDir: URL, progress: @escaping (String, Int, Int) -> Void) async throws -> Int {
+    public func downloadAllFiles(to destinationDir: URL, progress: @escaping (String, Int, Int) -> Void) async throws -> Int {
         let files = await listFiles()
         let downloadableFiles = files.filter { !$0.isDirectory }
         var downloadedCount = 0
@@ -198,7 +209,7 @@ final class CameraService: NSObject {
 
 // MARK: - ICDeviceBrowserDelegate
 extension CameraService: ICDeviceBrowserDelegate {
-    nonisolated func deviceBrowser(_ browser: ICDeviceBrowser, didAdd device: ICDevice, moreComing: Bool) {
+    public nonisolated func deviceBrowser(_ browser: ICDeviceBrowser, didAdd device: ICDevice, moreComing: Bool) {
         guard let camera = device as? ICCameraDevice else { return }
         // カメラ発見時にデリゲートを設定
         camera.delegate = self
@@ -207,7 +218,7 @@ extension CameraService: ICDeviceBrowserDelegate {
         }
     }
 
-    nonisolated func deviceBrowser(_ browser: ICDeviceBrowser, didRemove device: ICDevice, moreGoing: Bool) {
+    public nonisolated func deviceBrowser(_ browser: ICDeviceBrowser, didRemove device: ICDevice, moreGoing: Bool) {
         let uuid = device.uuidString
         Task { @MainActor in
             self.cameras.removeAll { $0.uuidString == uuid }
@@ -217,7 +228,7 @@ extension CameraService: ICDeviceBrowserDelegate {
 
 // MARK: - ICCameraDeviceDelegate
 extension CameraService: ICCameraDeviceDelegate {
-    nonisolated func cameraDevice(_ camera: ICCameraDevice, didAdd items: [ICCameraItem]) {
+    public nonisolated func cameraDevice(_ camera: ICCameraDevice, didAdd items: [ICCameraItem]) {
         let fileInfos = items.map { item in
             FileInfo(
                 name: item.name ?? "Unknown",
@@ -231,25 +242,25 @@ extension CameraService: ICCameraDeviceDelegate {
         }
     }
 
-    nonisolated func cameraDevice(_ camera: ICCameraDevice, didRemove items: [ICCameraItem]) {}
+    public nonisolated func cameraDevice(_ camera: ICCameraDevice, didRemove items: [ICCameraItem]) {}
 
-    nonisolated func cameraDevice(_ camera: ICCameraDevice, didRenameItems items: [ICCameraItem]) {}
+    public nonisolated func cameraDevice(_ camera: ICCameraDevice, didRenameItems items: [ICCameraItem]) {}
 
-    nonisolated func cameraDevice(_ camera: ICCameraDevice, didCompleteDeleteFilesWithError error: Error?) {}
+    public nonisolated func cameraDevice(_ camera: ICCameraDevice, didCompleteDeleteFilesWithError error: Error?) {}
 
-    nonisolated func cameraDevice(_ camera: ICCameraDevice, didReceiveThumbnail thumbnail: CGImage?, for item: ICCameraItem, error: Error?) {}
+    public nonisolated func cameraDevice(_ camera: ICCameraDevice, didReceiveThumbnail thumbnail: CGImage?, for item: ICCameraItem, error: Error?) {}
 
-    nonisolated func cameraDevice(_ camera: ICCameraDevice, didReceiveMetadata metadata: [AnyHashable: Any]?, for item: ICCameraItem, error: Error?) {}
+    public nonisolated func cameraDevice(_ camera: ICCameraDevice, didReceiveMetadata metadata: [AnyHashable: Any]?, for item: ICCameraItem, error: Error?) {}
 
-    nonisolated func cameraDevice(_ camera: ICCameraDevice, didReceivePTPEvent eventData: Data) {}
+    public nonisolated func cameraDevice(_ camera: ICCameraDevice, didReceivePTPEvent eventData: Data) {}
 
-    nonisolated func cameraDeviceDidChangeCapability(_ camera: ICCameraDevice) {}
+    public nonisolated func cameraDeviceDidChangeCapability(_ camera: ICCameraDevice) {}
 
-    nonisolated func cameraDeviceDidRemoveAccessRestriction(_ device: ICDevice) {}
+    public nonisolated func cameraDeviceDidRemoveAccessRestriction(_ device: ICDevice) {}
 
-    nonisolated func cameraDeviceDidEnableAccessRestriction(_ device: ICDevice) {}
+    public nonisolated func cameraDeviceDidEnableAccessRestriction(_ device: ICDevice) {}
 
-    nonisolated func deviceDidBecomeReady(withCompleteContentCatalog device: ICCameraDevice) {
+    public nonisolated func deviceDidBecomeReady(withCompleteContentCatalog device: ICCameraDevice) {
         Task { @MainActor in
             if let cont = self.fileContinuation {
                 self.fileContinuation = nil
@@ -258,7 +269,7 @@ extension CameraService: ICCameraDeviceDelegate {
         }
     }
 
-    nonisolated func device(_ device: ICDevice, didOpenSessionWithError error: Error?) {
+    public nonisolated func device(_ device: ICDevice, didOpenSessionWithError error: Error?) {
         Task { @MainActor in
             if let error = error {
                 print("Failed to open session: \(error)")
@@ -270,14 +281,14 @@ extension CameraService: ICCameraDeviceDelegate {
         }
     }
 
-    nonisolated func device(_ device: ICDevice, didCloseSessionWithError error: Error?) {}
+    public nonisolated func device(_ device: ICDevice, didCloseSessionWithError error: Error?) {}
 
-    nonisolated func didRemove(_ device: ICDevice) {}
+    public nonisolated func didRemove(_ device: ICDevice) {}
 }
 
 // MARK: - ICCameraDeviceDownloadDelegate
 extension CameraService: ICCameraDeviceDownloadDelegate {
-    @objc nonisolated func didDownloadFile(_ file: ICCameraFile, error: Error?, options: [String: Any], contextInfo: UnsafeMutableRawPointer?) {
+    @objc public nonisolated func didDownloadFile(_ file: ICCameraFile, error: Error?, options: [String: Any], contextInfo: UnsafeMutableRawPointer?) {
         let savedFilename = options[ICDownloadOption.savedFilename.rawValue] as? String
         let destDir = options[ICDownloadOption.downloadsDirectoryURL.rawValue] as? URL
         let downloadError = error
@@ -296,12 +307,12 @@ extension CameraService: ICCameraDeviceDownloadDelegate {
 }
 
 // MARK: - Errors
-enum CameraError: LocalizedError {
+public enum CameraError: LocalizedError, Equatable {
     case noCameraFound
     case fileNotFound(String)
     case downloadFailed(String)
 
-    var errorDescription: String? {
+    public var errorDescription: String? {
         switch self {
         case .noCameraFound:
             return "No camera found. Please connect a camera."

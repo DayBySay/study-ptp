@@ -1,5 +1,6 @@
 import ArgumentParser
 import Foundation
+import PTPToolCore
 
 struct ListCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
@@ -7,15 +8,12 @@ struct ListCommand: AsyncParsableCommand {
         abstract: "List files on the camera"
     )
 
-    @Option(name: .shortAndLong, help: "Path to list (e.g., DCIM/100RICOH)")
-    var path: String?
-
     @MainActor
     func run() async throws {
         print("Connecting to camera...")
 
         let service = CameraService()
-        let files = await service.listFiles(path: path)
+        let files = await service.listFiles()
 
         if files.isEmpty {
             print("No files found.")

@@ -1,5 +1,6 @@
 import ArgumentParser
 import Foundation
+import PTPToolCore
 
 struct InfoCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
