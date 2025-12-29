@@ -53,13 +53,7 @@ public final class CameraService: NSObject {
     public func discoverCameras(timeout: TimeInterval = 3.0) async -> [CameraInfo] {
         // 既にカメラが見つかっている場合は再検索しない
         if !cameras.isEmpty {
-            return cameras.map { device in
-                CameraInfo(
-                    name: device.name ?? "Unknown",
-                    serialNumber: device.serialNumberString,
-                    deviceType: "PTP Camera"
-                )
-            }
+            return cameras.map { makeCameraInfo(from: $0) }
         }
 
         return await withCheckedContinuation { continuation in
@@ -73,14 +67,7 @@ public final class CameraService: NSObject {
                     // deviceBrowser.stop() を呼ばない - カメラとの接続を維持
                     if let cont = self.continuation {
                         self.continuation = nil
-                        let infos = self.cameras.map { device in
-                            CameraInfo(
-                                name: device.name ?? "Unknown",
-                                serialNumber: device.serialNumberString,
-                                deviceType: "PTP Camera"
-                            )
-                        }
-                        cont.resume(returning: infos)
+                        cont.resume(returning: self.cameras.map { self.makeCameraInfo(from: $0) })
                     }
                 }
             }
@@ -89,7 +76,7 @@ public final class CameraService: NSObject {
 
     /// 接続されているカメラの詳細情報を取得
     public func getCameraDetails() async -> [(name: String, details: [String: String])] {
-        let _ = await discoverCameras()
+        _ = await discoverCameras()
         return cameras.map { device in
             var details: [String: String] = [:]
             details["Name"] = device.name ?? "Unknown"
@@ -109,7 +96,7 @@ public final class CameraService: NSObject {
             return pendingFiles
         }
 
-        let _ = await discoverCameras()
+        _ = await discoverCameras()
 
         guard let camera = cameras.first else {
             return []
@@ -137,17 +124,14 @@ public final class CameraService: NSObject {
 
     /// ファイルをダウンロード
     public func downloadFile(named fileName: String, to destinationDir: URL) async throws -> URL {
-        let _ = await discoverCameras()
+        _ = await discoverCameras()
 
         guard let camera = cameras.first else {
             throw CameraError.noCameraFound
         }
 
-        // ファイル一覧を取得してファイルを探す
-        let files = await listFiles()
-        guard let _ = files.first(where: { $0.name == fileName }) else {
-            throw CameraError.fileNotFound(fileName)
-        }
+        // セッションを開いてファイル一覧を取得
+        _ = await listFiles()
 
         // ImageCaptureCoreのファイルオブジェクトを探す
         guard let cameraFile = findCameraFile(named: fileName, in: camera) else {
@@ -181,11 +165,19 @@ public final class CameraService: NSObject {
 
         for (index, file) in downloadableFiles.enumerated() {
             progress(file.name, index + 1, downloadableFiles.count)
-            let _ = try await downloadFile(named: file.name, to: destinationDir)
+            _ = try await downloadFile(named: file.name, to: destinationDir)
             downloadedCount += 1
         }
 
         return downloadedCount
+    }
+
+    private func makeCameraInfo(from device: ICCameraDevice) -> CameraInfo {
+        CameraInfo(
+            name: device.name ?? "Unknown",
+            serialNumber: device.serialNumberString,
+            deviceType: "PTP Camera"
+        )
     }
 
     private func findCameraFile(named name: String, in camera: ICCameraDevice) -> ICCameraFile? {
