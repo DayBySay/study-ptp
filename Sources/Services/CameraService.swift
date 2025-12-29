@@ -44,11 +44,11 @@ final class CameraService: NSObject {
             self.cameras = []
             deviceBrowser.start()
 
-            // タイムアウト後に結果を返す
+            // タイムアウト後に結果を返す（ブラウザは停止しない）
             Task {
                 try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
                 await MainActor.run {
-                    self.deviceBrowser.stop()
+                    // deviceBrowser.stop() を呼ばない - カメラとの接続を維持
                     if let cont = self.continuation {
                         self.continuation = nil
                         let infos = self.cameras.map { device in
@@ -81,7 +81,7 @@ final class CameraService: NSObject {
     }
 
     /// カメラ内のファイル一覧を取得
-    func listFiles(path: String? = nil) async -> [FileInfo] {
+    func listFiles(path: String? = nil, timeout: TimeInterval = 10.0) async -> [FileInfo] {
         let _ = await discoverCameras()
 
         guard let camera = cameras.first else {
@@ -95,6 +95,17 @@ final class CameraService: NSObject {
 
             camera.delegate = self
             camera.requestOpenSession()
+
+            // タイムアウト後に現在取得済みのファイルを返す
+            Task {
+                try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+                await MainActor.run {
+                    if let cont = self.fileContinuation {
+                        self.fileContinuation = nil
+                        cont.resume(returning: self.pendingFiles)
+                    }
+                }
+            }
         }
     }
 
@@ -174,6 +185,8 @@ final class CameraService: NSObject {
 extension CameraService: ICDeviceBrowserDelegate {
     nonisolated func deviceBrowser(_ browser: ICDeviceBrowser, didAdd device: ICDevice, moreComing: Bool) {
         guard let camera = device as? ICCameraDevice else { return }
+        // カメラ発見時にデリゲートを設定
+        camera.delegate = self
         Task { @MainActor in
             self.cameras.append(camera)
         }
